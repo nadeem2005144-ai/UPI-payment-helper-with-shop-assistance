@@ -1,56 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   runApp(MyApp());
 }
-// Updated Data Model with Category
-// Data Models
-class ShopItem {
-  int? id;
-  String name;
-  double price;
-  String type; // 'unit' or 'weight'
-  double currentStock;
-  String? imageBase64;
-  DateTime createdAt;
 
-  ShopItem({
-    this.id,
-    required this.name,
-    required this.price,
-    required this.type,
-    required this.currentStock,
-    this.imageBase64,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+// Text-to-Speech Service
+class VoiceService {
+  static final VoiceService _instance = VoiceService._internal();
+  factory VoiceService() => _instance;
+  VoiceService._internal();
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'price': price,
-      'type': type,
-      'currentStock': currentStock,
-      'imageBase64': imageBase64,
-      'createdAt': createdAt.millisecondsSinceEpoch,
-    };
+  final FlutterTts _flutterTts = FlutterTts();
+
+  Future<void> init() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
   }
 
-  factory ShopItem.fromMap(Map<String, dynamic> map) {
-    return ShopItem(
-      id: map['id'],
-      name: map['name'],
-      price: map['price'],
-      type: map['type'],
-      currentStock: map['currentStock'],
-      imageBase64: map['imageBase64'],
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
-    );
+  Future<void> speak(String text) async {
+    await _flutterTts.speak(text);
+  }
+
+  Future<void> stop() async {
+    await _flutterTts.stop();
+  }
+
+  Future<void> setLanguage(String languageCode) async {
+    switch (languageCode) {
+      case 'hi':
+        await _flutterTts.setLanguage("hi-IN");
+        break;
+      case 'kn':
+        await _flutterTts.setLanguage("kn-IN");
+        break;
+      default:
+        await _flutterTts.setLanguage("en-US");
+    }
+  }
+
+  Future<void> setSpeed(double speed) async {
+    await _flutterTts.setSpeechRate(speed);
   }
 }
-
-
 
 // Storage Service Class
 class StorageService {
@@ -58,11 +54,12 @@ class StorageService {
   static const String _languageKey = 'language';
   static const String _upiIdKey = 'upiId';
   static const String _isSetupCompletedKey = 'isSetupCompleted';
+  static const String _shopNameKey = 'shopName';
+
   static Future<SharedPreferences> get _prefs async {
     return await SharedPreferences.getInstance();
   }
 
-  // Save Login State
   static Future<void> setLoggedIn(bool value) async {
     final prefs = await _prefs;
     await prefs.setBool(_isLoggedInKey, value);
@@ -73,7 +70,6 @@ class StorageService {
     return prefs.getBool(_isLoggedInKey) ?? false;
   }
 
-  // Save Language
   static Future<void> setLanguage(String languageCode) async {
     final prefs = await _prefs;
     await prefs.setString(_languageKey, languageCode);
@@ -84,7 +80,6 @@ class StorageService {
     return prefs.getString(_languageKey) ?? 'en';
   }
 
-  // Save UPI ID
   static Future<void> setUpiId(String upiId) async {
     final prefs = await _prefs;
     await prefs.setString(_upiIdKey, upiId);
@@ -95,7 +90,16 @@ class StorageService {
     return prefs.getString(_upiIdKey) ?? '';
   }
 
-  // Setup Completion
+  static Future<void> setShopName(String name) async {
+    final prefs = await _prefs;
+    await prefs.setString(_shopNameKey, name);
+  }
+
+  static Future<String> getShopName() async {
+    final prefs = await _prefs;
+    return prefs.getString(_shopNameKey) ?? 'My Shop';
+  }
+
   static Future<void> setSetupCompleted(bool value) async {
     final prefs = await _prefs;
     await prefs.setBool(_isSetupCompletedKey, value);
@@ -106,24 +110,25 @@ class StorageService {
     return prefs.getBool(_isSetupCompletedKey) ?? false;
   }
 
-  // Logout - Clear all data
   static Future<void> logout() async {
     final prefs = await _prefs;
     await prefs.remove(_isLoggedInKey);
     await prefs.remove(_upiIdKey);
     await prefs.remove(_isSetupCompletedKey);
-    // Keep language preference for next user
+    await prefs.remove(_shopNameKey);
   }
 }
-// Language Service Class
+
 // Language Service Class
 class LanguageService {
   static Map<String, Map<String, String>> translations = {
     'en': {
       'setup_upi': 'Setup Your UPI Account',
-      'enter_upi_details': 'Enter your UPI ID and create a secure password',
+      'enter_upi_details': 'Enter your UPI ID and shop details',
       'upi_id': 'UPI ID',
       'upi_hint': 'example@ybl or example@paytm',
+      'shop_name': 'Shop Name',
+      'shop_name_hint': 'Enter your shop name',
       'create_password': 'Create Password',
       'password_hint': 'Enter your password',
       'confirm_password': 'Confirm Password',
@@ -139,24 +144,30 @@ class LanguageService {
       'password_length': 'Password must be at least 6 characters',
       'confirm_password_field': 'Please confirm your password',
       'password_mismatch': 'Passwords do not match',
-      // NEW TRANSLATIONS:
+      'enter_shop_name': 'Please enter your shop name',
       'dashboard': 'Dashboard',
       'welcome': 'Welcome',
       'language': 'Language',
       'quick_actions': 'Quick Actions',
-      'add_item': 'Add Item',
-      'inventory': 'Inventory',
-      'receive_payment': 'Receive Payment',
-      'transaction_history': 'Transaction History',
       'logout': 'Logout',
       'logout_confirmation': 'Are you sure you want to logout?',
       'cancel': 'Cancel',
+      'receive_payment': 'Receive Payment',
+      'today_sales': 'Today Sales',
+      'voice_help': 'Voice Help',
+      'voice_settings': 'Voice Settings',
+      'show_qr': 'Show QR Code',
+      'payment_received': 'Payment Received',
+      'share_upi': 'Share your UPI ID with customer',
+      'scan_qr': 'Scan QR Code to Pay',
     },
     'hi': {
       'setup_upi': 'अपना UPI अकाउंट सेटअप करें',
-      'enter_upi_details': 'अपना UPI ID दर्ज करें और एक सुरक्षित पासवर्ड बनाएं',
+      'enter_upi_details': 'अपना UPI ID और दुकान का विवरण दर्ज करें',
       'upi_id': 'UPI ID',
       'upi_hint': 'example@ybl या example@paytm',
+      'shop_name': 'दुकान का नाम',
+      'shop_name_hint': 'अपनी दुकान का नाम दर्ज करें',
       'create_password': 'पासवर्ड बनाएं',
       'password_hint': 'अपना पासवर्ड दर्ज करें',
       'confirm_password': 'पासवर्ड की पुष्टि करें',
@@ -164,7 +175,7 @@ class LanguageService {
       'password_tip': 'अपने लेन-देन डेटा को सुरक्षित रखने के लिए एक मजबूत पासवर्ड का उपयोग करें',
       'save_continue': 'सहेजें और जारी रखें',
       'setup_complete': 'सेटअप पूरा हुआ!',
-      'setup_success': 'आपका UPI अकाउंट सफलतापूर्वक सेटअप हो गया है। अब आप ऐप का उपयोग शुरू कर सकते हैं।',
+      'setup_success': 'आपका UPI अकाउंट सफलतापूर्वक सेटअप हो गया है। अब आप ऐप का उपयोग कर सकते हैं।',
       'get_started': 'शुरू करें',
       'enter_upi': 'कृपया अपना UPI ID दर्ज करें',
       'valid_upi': 'एक वैध UPI ID दर्ज करें (जैसे, example@ybl)',
@@ -172,24 +183,30 @@ class LanguageService {
       'password_length': 'पासवर्ड कम से कम 6 वर्णों का होना चाहिए',
       'confirm_password_field': 'कृपया अपने पासवर्ड की पुष्टि करें',
       'password_mismatch': 'पासवर्ड मेल नहीं खाते',
-      // NEW TRANSLATIONS:
+      'enter_shop_name': 'कृपया अपने दुकान का नाम दर्ज करें',
       'dashboard': 'डैशबोर्ड',
       'welcome': 'स्वागत है',
       'language': 'भाषा',
       'quick_actions': 'त्वरित कार्य',
-      'add_item': 'आइटम जोड़ें',
-      'inventory': 'इन्वेंटरी',
-      'receive_payment': 'भुगतान प्राप्त करें',
-      'transaction_history': 'लेन-देन इतिहास',
       'logout': 'लॉगआउट',
       'logout_confirmation': 'क्या आप वाकई लॉगआउट करना चाहते हैं?',
       'cancel': 'रद्द करें',
+      'receive_payment': 'भुगतान प्राप्त करें',
+      'today_sales': 'आज की बिक्री',
+      'voice_help': 'वॉयस सहायता',
+      'voice_settings': 'वॉयस सेटिंग्स',
+      'show_qr': 'QR कोड दिखाएं',
+      'payment_received': 'भुगतान प्राप्त हुआ',
+      'share_upi': 'ग्राहक को अपना UPI ID शेयर करें',
+      'scan_qr': 'भुगतान करने के लिए QR कोड स्कैन करें',
     },
     'kn': {
       'setup_upi': 'ನಿಮ್ಮ UPI ಖಾತೆಯನ್ನು ಸೆಟಪ್ ಮಾಡಿ',
-      'enter_upi_details': 'ನಿಮ್ಮ UPI ID ನಮೂದಿಸಿ ಮತ್ತು ಸುರಕ್ಷಿತ ಪಾಸ್ವರ್ಡ್ ರಚಿಸಿ',
+      'enter_upi_details': 'ನಿಮ್ಮ UPI ID ಮತ್ತು ಅಂಗಡಿಯ ವಿವರಗಳನ್ನು ನಮೂದಿಸಿ',
       'upi_id': 'UPI ID',
       'upi_hint': 'example@ybl ಅಥವಾ example@paytm',
+      'shop_name': 'ಅಂಗಡಿಯ ಹೆಸರು',
+      'shop_name_hint': 'ನಿಮ್ಮ ಅಂಗಡಿಯ ಹೆಸರನ್ನು ನಮೂದಿಸಿ',
       'create_password': 'ಪಾಸ್ವರ್ಡ್ ರಚಿಸಿ',
       'password_hint': 'ನಿಮ್ಮ ಪಾಸ್ವರ್ಡ್ ನಮೂದಿಸಿ',
       'confirm_password': 'ಪಾಸ್ವರ್ಡ್ ದೃಢೀಕರಿಸಿ',
@@ -205,18 +222,22 @@ class LanguageService {
       'password_length': 'ಪಾಸ್ವರ್ಡ್ ಕನಿಷ್ಠ 6 ಅಕ್ಷರಗಳಾಗಿರಬೇಕು',
       'confirm_password_field': 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪಾಸ್ವರ್ಡ್ ದೃಢೀಕರಿಸಿ',
       'password_mismatch': 'ಪಾಸ್ವರ್ಡ್ಗಳು ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ',
-      // NEW TRANSLATIONS:
+      'enter_shop_name': 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಅಂಗಡಿಯ ಹೆಸರನ್ನು ನಮೂದಿಸಿ',
       'dashboard': 'ಡ್ಯಾಶ್ಬೋರ್ಡ್',
       'welcome': 'ಸ್ವಾಗತ',
       'language': 'ಭಾಷೆ',
       'quick_actions': 'ತ್ವರಿತ ಕ್ರಿಯೆಗಳು',
-      'add_item': 'ಐಟಂ ಸೇರಿಸಿ',
-      'inventory': 'ದಾಸ್ತಾನು',
-      'receive_payment': 'ಪಾವತಿ ಸ್ವೀಕರಿಸಿ',
-      'transaction_history': 'ವಹಿವಾಟು ಇತಿಹಾಸ',
       'logout': 'ಲಾಗ್ ಔಟ್',
       'logout_confirmation': 'ನೀವು ಖಚಿತವಾಗಿ ಲಾಗ್ ಔಟ್ ಮಾಡಲು ಬಯಸುವಿರಾ?',
       'cancel': 'ರದ್ದುಮಾಡಿ',
+      'receive_payment': 'ಪಾವತಿ ಸ್ವೀಕರಿಸಿ',
+      'today_sales': 'ಇಂದಿನ ಮಾರಾಟ',
+      'voice_help': 'ಧ್ವನಿ ಸಹಾಯ',
+      'voice_settings': 'ಧ್ವನಿ ಸೆಟ್ಟಿಂಗ್ಗಳು',
+      'show_qr': 'QR ಕೋಡ್ ತೋರಿಸಿ',
+      'payment_received': 'ಪಾವತಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ',
+      'share_upi': 'ಗ್ರಾಹಕರಿಗೆ ನಿಮ್ಮ UPI ID ಹಂಚಿಕೊಳ್ಳಿ',
+      'scan_qr': 'ಪಾವತಿಸಲು QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ',
     },
   };
 
@@ -224,6 +245,7 @@ class LanguageService {
     return translations[languageCode]?[key] ?? translations['en']![key]!;
   }
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -265,7 +287,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Simple Splash Screen
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -312,7 +333,6 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   String? selectedLanguage;
 
-  // Only 3 languages now
   final List<Map<String, String>> languages = [
     {'code': 'hi', 'name': 'हिन्दी'},
     {'code': 'en', 'name': 'English'},
@@ -328,12 +348,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
-              // Header Section
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // App Logo/Icon
                     Container(
                       width: 120,
                       height: 120,
@@ -348,8 +366,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-
-                    // App Name
                     Text(
                       'Rural UPI Assistant',
                       style: TextStyle(
@@ -359,8 +375,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-
-                    // Tagline
                     Text(
                       'Your Digital Shop Partner',
                       style: TextStyle(
@@ -371,8 +385,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ],
                 ),
               ),
-
-              // Language Selection Section
               Column(
                 children: [
                   Text(
@@ -384,8 +396,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Language Buttons - Now only 3 in a column
                   Column(
                     children: languages.map((lang) {
                       return Padding(
@@ -402,16 +412,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       );
                     }).toList(),
                   ),
-
                   const SizedBox(height: 32),
-
-                  // Continue Button
                   SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
                       onPressed: selectedLanguage != null ? () {
-                        // Navigate to next screen
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -446,7 +452,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
-// Language Button Widget - FIXED
 class LanguageButton extends StatelessWidget {
   final String languageName;
   final bool isSelected;
@@ -489,7 +494,6 @@ class LanguageButton extends StatelessWidget {
   }
 }
 
-// Next Screen - UPI Setup (We'll build this next)
 class UpiSetupScreen extends StatefulWidget {
   final String selectedLanguage;
 
@@ -502,6 +506,7 @@ class UpiSetupScreen extends StatefulWidget {
 class _UpiSetupScreenState extends State<UpiSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _upiIdController = TextEditingController();
+  final _shopNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -516,7 +521,6 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
         backgroundColor: Colors.green[600],
         foregroundColor: Colors.white,
         actions: [
-          // Logout Button in AppBar
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _showLogoutDialog,
@@ -531,7 +535,6 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               const SizedBox(height: 20),
               Text(
                 LanguageService.getText(widget.selectedLanguage, 'setup_upi'),
@@ -550,6 +553,36 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              // Shop Name Field
+              Text(
+                LanguageService.getText(widget.selectedLanguage, 'shop_name'),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _shopNameController,
+                decoration: InputDecoration(
+                  hintText: LanguageService.getText(widget.selectedLanguage, 'shop_name_hint'),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.store),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return LanguageService.getText(widget.selectedLanguage, 'enter_shop_name');
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
 
               // UPI ID Field
               Text(
@@ -713,6 +746,7 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
       ),
     );
   }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -729,10 +763,7 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
             ),
             TextButton(
               onPressed: () async {
-                // Clear storage and logout
                 await StorageService.logout();
-
-                // Navigate back to Welcome Screen
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const WelcomeScreen()),
@@ -746,17 +777,19 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
       },
     );
   }
+
   void _saveUPIDetails() async {
     if (_formKey.currentState!.validate()) {
-      // Save to SharedPreferences
       await StorageService.setLoggedIn(true);
       await StorageService.setLanguage(widget.selectedLanguage);
       await StorageService.setUpiId(_upiIdController.text);
+      await StorageService.setShopName(_shopNameController.text);
       await StorageService.setSetupCompleted(true);
 
       _showSuccessDialog();
     }
   }
+
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -769,7 +802,6 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Navigate to Main Dashboard
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -788,23 +820,48 @@ class _UpiSetupScreenState extends State<UpiSetupScreen> {
   @override
   void dispose() {
     _upiIdController.dispose();
+    _shopNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 }
 
-// Temporary MainDashboard - We'll build this properly next
-class MainDashboard extends StatelessWidget {
+class MainDashboard extends StatefulWidget {
   final String language;
 
   const MainDashboard({super.key, required this.language});
 
   @override
+  State<MainDashboard> createState() => _MainDashboardState();
+}
+
+class _MainDashboardState extends State<MainDashboard> {
+  @override
+  void initState() {
+    super.initState();
+    _initializeVoice();
+  }
+
+  void _initializeVoice() async {
+    await VoiceService().init();
+    await VoiceService().setLanguage(widget.language);
+    Future.delayed(const Duration(seconds: 1), () {
+      _playVoiceConfirmation('Welcome to your shop! Ready to accept payments.');
+    });
+  }
+
+  // NEW: Generate UPI URL method
+  String _generateUpiUrl(String upiId, String shopName) {
+    // Format: upi://pay?pa=UPI_ID&pn=SHOP_NAME&cu=INR
+    return "upi://pay?pa=$upiId&pn=${Uri.encodeComponent(shopName)}&cu=INR";
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(LanguageService.getText(language, 'dashboard')),
+        title: Text(LanguageService.getText(widget.language, 'dashboard')),
         backgroundColor: Colors.green[600],
         foregroundColor: Colors.white,
         actions: [
@@ -818,9 +875,17 @@ class MainDashboard extends StatelessWidget {
         ],
       ),
       body: FutureBuilder(
-        future: StorageService.getUpiId(),
+        future: Future.wait([
+          StorageService.getUpiId(),
+          StorageService.getShopName(),
+        ]),
         builder: (context, snapshot) {
-          final upiId = snapshot.data ?? 'Not set';
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final upiId = snapshot.data?[0] ?? 'Not set';
+          final shopName = snapshot.data?[1] ?? 'My Shop';
 
           return Padding(
             padding: const EdgeInsets.all(24.0),
@@ -836,13 +901,20 @@ class MainDashboard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '👋 ${LanguageService.getText(language, 'welcome')}',
+                          '👋 ${LanguageService.getText(widget.language, 'welcome')}',
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 10),
+                        Text(
+                          'Shop: $shopName',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
                         Text(
                           'UPI ID: $upiId',
                           style: TextStyle(
@@ -851,7 +923,7 @@ class MainDashboard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Language: ${LanguageService.getText(language, 'language')}',
+                          'Language: ${_getLanguageName(widget.language)}',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -865,7 +937,7 @@ class MainDashboard extends StatelessWidget {
 
                 // Quick Actions
                 Text(
-                  LanguageService.getText(language, 'quick_actions'),
+                  LanguageService.getText(widget.language, 'quick_actions'),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -882,38 +954,38 @@ class MainDashboard extends StatelessWidget {
                   children: [
                     _buildActionButton(
                       context,
-                      Icons.add,
-                      LanguageService.getText(language, 'add_item'),
-                      Colors.blue,
-                          () {
-                        // TODO: Navigate to Add Item screen
-                      },
-                    ),
-                    _buildActionButton(
-                      context,
-                      Icons.inventory,
-                      LanguageService.getText(language, 'inventory'),
-                      Colors.orange,
-                          () {
-                        // TODO: Navigate to Inventory screen
-                      },
-                    ),
-                    _buildActionButton(
-                      context,
                       Icons.qr_code,
-                      LanguageService.getText(language, 'receive_payment'),
+                      LanguageService.getText(widget.language, 'receive_payment'),
                       Colors.green,
                           () {
-                        // TODO: Navigate to QR Generator
+                        _startPaymentProcess(context);
                       },
                     ),
                     _buildActionButton(
                       context,
                       Icons.history,
-                      LanguageService.getText(language, 'transaction_history'),
+                      LanguageService.getText(widget.language, 'today_sales'),
                       Colors.purple,
                           () {
-                        // TODO: Navigate to History screen
+                        _showTodaySales(context);
+                      },
+                    ),
+                    _buildActionButton(
+                      context,
+                      Icons.volume_up,
+                      LanguageService.getText(widget.language, 'voice_help'),
+                      Colors.blue,
+                          () {
+                        _playHelpInstructions();
+                      },
+                    ),
+                    _buildActionButton(
+                      context,
+                      Icons.settings_voice,
+                      LanguageService.getText(widget.language, 'voice_settings'),
+                      Colors.orange,
+                          () {
+                        _voiceSetup(context);
                       },
                     ),
                   ],
@@ -955,22 +1027,426 @@ class MainDashboard extends StatelessWidget {
     );
   }
 
+  String _getLanguageName(String languageCode) {
+    switch (languageCode) {
+      case 'en':
+        return 'English';
+      case 'hi':
+        return 'हिन्दी';
+      case 'kn':
+        return 'ಕನ್ನಡ';
+      default:
+        return 'English';
+    }
+  }
+
+  void _startPaymentProcess(BuildContext context) {
+    _playVoiceConfirmation('Opening payment. Show your UPI ID to customer for payment.');
+
+    showDialog(
+      context: context,
+      builder: (context) => FutureBuilder(
+        future: Future.wait([
+          StorageService.getUpiId(),
+          StorageService.getShopName(),
+        ]),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading...'),
+                ],
+              ),
+            );
+          }
+
+          final upiId = snapshot.data?[0] ?? 'not-set@ybl';
+          final shopName = snapshot.data?[1] ?? 'My Shop';
+
+          return AlertDialog(
+            title: Text(LanguageService.getText(widget.language, 'receive_payment')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.payment, size: 50, color: Colors.green),
+                const SizedBox(height: 16),
+                Text(
+                  LanguageService.getText(widget.language, 'share_upi'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    upiId,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Column(
+                  children: [
+                    const Text(
+                      'Customer can pay using:',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '• Any UPI app\n• Your UPI ID: $upiId\n• Any amount',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _playVoiceConfirmation('Payment cancelled.');
+                },
+                child: Text(LanguageService.getText(widget.language, 'cancel')),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showQRCode(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                ),
+                child: Text(
+                  LanguageService.getText(widget.language, 'show_qr'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showQRCode(BuildContext context) {
+    _playVoiceConfirmation('Showing QR code for payment.');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => FutureBuilder(
+        future: Future.wait([
+          StorageService.getUpiId(),
+          StorageService.getShopName(),
+        ]),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Dialog(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading QR Code...'),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final upiId = snapshot.data?[0] ?? 'not-set@ybl';
+          final shopName = snapshot.data?[1] ?? 'My Shop';
+          final upiUrl = _generateUpiUrl(upiId, shopName);
+
+          return Dialog(
+            child: Container(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Payment Header
+                  const Icon(Icons.payment, size: 50, color: Colors.green),
+                  const SizedBox(height: 16),
+                  Text(
+                    LanguageService.getText(widget.language, 'receive_payment'),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // UPI ID Display
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green, width: 2),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'YOUR UPI ID:',
+                          style: TextStyle(fontSize: 14, color: Colors.green, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          upiId,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          LanguageService.getText(widget.language, 'share_upi'),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // REAL QR CODE - FIXED
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.blue, width: 2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        QrImageView(
+                          data: upiUrl,
+                          version: QrVersions.auto,
+                          size: 200.0,
+                          backgroundColor: Colors.white,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          LanguageService.getText(widget.language, 'scan_qr'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Shop: $shopName',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Instructions
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.phone_android, size: 24, color: Colors.orange),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Customer can scan QR code with any UPI app to pay any amount',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _playVoiceConfirmation('Payment cancelled.');
+                          },
+                          child: Text(LanguageService.getText(widget.language, 'cancel')),
+                        ),
+                      ),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _confirmPayment(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: Text(
+                            LanguageService.getText(widget.language, 'payment_received'),
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmPayment(BuildContext context) {
+    String message;
+    switch (widget.language) {
+      case 'hi':
+        message = 'भुगतान सफलतापूर्वक प्राप्त हुआ! धन्यवाद!';
+        break;
+      case 'kn':
+        message = 'ಪಾವತಿ ಯಶಸ್ವಿಯಾಗಿ ಪಡೆಯಲಾಗಿದೆ! ಧನ್ಯವಾದಗಳು!';
+        break;
+      default:
+        message = 'Payment received successfully! Thank you!';
+    }
+
+    _playVoiceConfirmation(message);
+
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Payment recorded successfully!'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
+
+  void _playVoiceConfirmation(String message) async {
+    try {
+      await VoiceService().speak(message);
+    } catch (e) {
+      print('Voice error: $e');
+    }
+  }
+
+  void _playHelpInstructions() {
+    final voiceMessage = 'Welcome to Rural UPI Assistant. '
+        'Press green button for payment. '
+        'Press purple button for sales summary. '
+        'Press blue button for voice help. '
+        'Press orange button for voice settings.';
+    _playVoiceConfirmation(voiceMessage);
+  }
+
+  void _voiceSetup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(LanguageService.getText(widget.language, 'voice_settings')),
+        content: const Text('Choose voice speed:'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              VoiceService().setSpeed(0.3);
+              _playVoiceConfirmation('Slow voice activated');
+              Navigator.pop(context);
+            },
+            child: const Text('Slow'),
+          ),
+          TextButton(
+            onPressed: () {
+              VoiceService().setSpeed(0.5);
+              _playVoiceConfirmation('Normal voice activated');
+              Navigator.pop(context);
+            },
+            child: const Text('Normal'),
+          ),
+          TextButton(
+            onPressed: () {
+              VoiceService().setSpeed(0.8);
+              _playVoiceConfirmation('Fast voice activated');
+              Navigator.pop(context);
+            },
+            child: const Text('Fast'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTodaySales(BuildContext context) {
+    _playVoiceConfirmation('Showing today sales summary.');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(LanguageService.getText(widget.language, 'today_sales')),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Total Sales: ₹0', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 10),
+            Text('Transactions: 0'),
+            SizedBox(height: 10),
+            Text('Simple summary for easy understanding'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _playVoiceConfirmation('Closing sales summary.');
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(LanguageService.getText(language, 'logout')),
-          content: Text(LanguageService.getText(language, 'logout_confirmation')),
+          title: Text(LanguageService.getText(widget.language, 'logout')),
+          content: Text(LanguageService.getText(widget.language, 'logout_confirmation')),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: Text(LanguageService.getText(language, 'cancel')),
+              child: Text(LanguageService.getText(widget.language, 'cancel')),
             ),
             TextButton(
               onPressed: () async {
+                await VoiceService().stop();
                 await StorageService.logout();
                 Navigator.pushAndRemoveUntil(
                   context,
@@ -978,7 +1454,7 @@ class MainDashboard extends StatelessWidget {
                       (route) => false,
                 );
               },
-              child: Text(LanguageService.getText(language, 'logout')),
+              child: Text(LanguageService.getText(widget.language, 'logout')),
             ),
           ],
         );
