@@ -38,6 +38,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   firebase_core: ^4.2.1
   cloud_firestore: ^6.1.0
+  file_picker: ^10.3.7  # ADD THIS
+  path: ^1.8.3
+  url_launcher: ^6.2.4
 
 
 

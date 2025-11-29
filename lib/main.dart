@@ -5,13 +5,32 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'firebase_service.dart';
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_config_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'firebase_instructions_screen.dart';
 
 
+// ==== REPLACE YOUR CURRENT main() FUNCTION WITH THIS ====
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  try {
+    // Try to initialize with custom Firebase config first
+    await FirebaseConfigService.reinitializeFromStorage();
+  }
+  catch (e) {
+    // If custom config fails, try default Firebase
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      print('Both Firebase initializations failed: $e');
+    }
+  }
+
   runApp(const MyApp());
 }
+// ==== END OF MAIN FUNCTION ====
 
 // Text-to-Speech Service
 class VoiceService {
@@ -229,6 +248,27 @@ class StorageService {
     await prefs.remove(_isLoggedInKey);
     // Keep UPI ID and transactions for convenience
   }
+  static const String _firebaseConfigKey = 'firebaseConfig';
+
+  static Future<void> setFirebaseConfig(String configJson) async {
+    final prefs = await _prefs;
+    await prefs.setString(_firebaseConfigKey, configJson);
+  }
+
+  static Future<Map<String, dynamic>?> getFirebaseConfig() async {
+    final prefs = await _prefs;
+    final configJson = prefs.getString(_firebaseConfigKey);
+    if (configJson != null) {
+      return json.decode(configJson);
+    }
+    return null;
+  }
+
+  static Future<void> clearFirebaseConfig() async {
+    final prefs = await _prefs;
+    await prefs.remove(_firebaseConfigKey);
+  }
+
 }
 
 // Language Service Class
@@ -366,6 +406,7 @@ class LanguageService {
     return translations[languageCode]?[key] ?? translations['en']![key]!;
   }
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -793,7 +834,16 @@ class _MainDashboardState extends State<MainDashboard> {
     super.initState();
     _initializeVoice();
   }
-
+// ==== ADD THIS METHOD IN _MainDashboardState CLASS ====
+  void _showFirebaseConfigScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FirebaseConfigScreen(language: widget.language),
+      ),
+    );
+  }
+// ==== END OF METHOD ====
   void _initializeVoice() async {
     await VoiceService().init();
     await VoiceService().setLanguage(widget.language);
@@ -1942,7 +1992,17 @@ class _MainDashboardState extends State<MainDashboard> {
                             () {
                           _showSyncStatus(context);
                         },
-                      ),  ],
+                      ),
+                      _buildActionButton(
+                        context,
+                        Icons.settings,
+                        'Firebase Setup',  // You can translate this later
+                        Colors.blueGrey,
+                            () {
+                          _showFirebaseConfigScreen(context);
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2236,3 +2296,254 @@ class _LanguageChangeDialogState extends State<LanguageChangeDialog> {
     );
   }
 }
+// ==== PASTE THIS ENTIRE CLASS AT THE VERY END OF YOUR main.dart FILE ====
+
+class FirebaseConfigScreen extends StatefulWidget {
+  final String language;
+
+  const FirebaseConfigScreen({super.key, required this.language});
+
+  @override
+  _FirebaseConfigScreenState createState() => _FirebaseConfigScreenState();
+}
+
+class _FirebaseConfigScreenState extends State<FirebaseConfigScreen> {
+  bool _isLoading = false;
+  String _statusMessage = '';
+  bool _isSuccess = false;
+
+  Future<void> _pickJsonFile() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _statusMessage = '';
+      });
+
+      // Pick JSON file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        allowMultiple: false,
+      );
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        bool success = await FirebaseConfigService.saveAndInitializeFirebase(file);
+
+        setState(() {
+          _isSuccess = success;
+          _statusMessage = success
+              ? 'Firebase configured successfully! Your data will now sync to your own cloud.'
+              : 'Failed to configure Firebase. Please check your google-services.json file.';
+        });
+
+        if (success) {
+          // Wait a bit and go back
+          Future.delayed(const Duration(seconds: 2), () {
+            Navigator.pop(context);
+          });
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isSuccess = false;
+        _statusMessage = 'Error: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Connect Your Firebase'),
+        backgroundColor: Colors.green[600],
+        foregroundColor: Colors.white,
+      ),
+        body: SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Connect Your Own Firebase',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.green[800],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Upload your google-services.json file to use your own Firebase project for data storage.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.cloud_upload,
+                      size: 60,
+                      color: Colors.blue,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Upload google-services.json',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Get this file from your Firebase Console',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    if (_statusMessage.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _isSuccess ? Colors.green[50] : Colors.red[50],
+                          border: Border.all(
+                            color: _isSuccess ? Colors.green : Colors.red,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isSuccess ? Icons.check_circle : Icons.error,
+                              color: _isSuccess ? Colors.green : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _statusMessage,
+                                style: TextStyle(
+                                  color: _isSuccess ? Colors.green[800] : Colors.red[800],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    if (_statusMessage.isNotEmpty) const SizedBox(height: 16),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _pickJsonFile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text(
+                          'Upload google-services.json',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+// ==== ADD THIS INSTRUCTIONS BUTTON ====
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FirebaseInstructionsScreen(language: widget.language),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  side: BorderSide(color: Colors.green[600]!),
+                ),
+                child: Text(
+                  '📖 View Detailed Setup Instructions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.green[600],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+// ==== END OF INSTRUCTIONS BUTTON ====
+
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            Text(
+              'Quick Steps:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildStep('1. Go to Firebase Console (console.firebase.google.com)'),
+            _buildStep('2. Create a new project or use existing one'),
+            _buildStep('3. Add Android app with your package name'),
+            _buildStep('4. Download google-services.json file'),
+            _buildStep('5. Upload it here using the button above'),
+          ],
+                ),
+          ),
+        ),
+      ),
+    );
+
+  }
+
+  Widget _buildStep(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• '),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+}
+// ==== END OF NEW CLASS ====
